@@ -4,17 +4,36 @@ import os
 import base64
 import json
 
-# Inicialización de Firebase
 def init_firestore():
-    if not firebase_admin._apps:  # Evitar múltiples inicializaciones
+    """
+    Inicializa y retorna el cliente de Firestore.
+    Usa credenciales codificadas en base64 desde una variable de entorno.
+    """
+    # Verifica si Firebase ya fue inicializado
+    if not firebase_admin._apps:
+        # Obtén las credenciales codificadas desde la variable de entorno
         encoded_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64")
-        creds_json = base64.b64decode(encoded_creds)
-        creds_dict = json.loads(creds_json)
+        
+        if not encoded_creds:
+            raise EnvironmentError("La variable GOOGLE_APPLICATION_CREDENTIALS_BASE64 no está configurada.")
 
+        # Decodifica las credenciales de base64 a JSON
+        creds_json = base64.b64decode(encoded_creds).decode("utf-8")
+        
+        try:
+            creds_dict = json.loads(creds_json)  # Convierte el JSON a un diccionario
+        except json.JSONDecodeError as e:
+            raise ValueError("Las credenciales decodificadas no son JSON válido.") from e
+
+        # Crea las credenciales y inicializa la aplicación Firebase
         cred = credentials.Certificate(creds_dict)
         firebase_admin.initialize_app(cred)
 
-    return firestore.client()  # Retornar el cliente Firestore
+    # Retorna el cliente Firestore
+    return firestore.client()
 
 # Inicialización global del cliente Firestore
-db = init_firestore()
+try:
+    db = init_firestore()
+except Exception as e:
+    raise RuntimeError(f"Error al inicializar Firestore: {e}")
