@@ -63,8 +63,8 @@ class Prefijos(commands.Cog):
 
             # Confirmación en el canal donde se ejecutó el comando
             confirm_embed = discord.Embed(
-                title="Confirmación",
-                description="Pregunta hecha perrillo",
+                title="Recordatorio Actualizado",
+                description="Dentro del tiempo que me has dado Voy a recodarle",
                 color=0x00FF00  # Verde
             )
             await ctx.send(embed=confirm_embed)
