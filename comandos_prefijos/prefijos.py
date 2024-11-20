@@ -88,10 +88,13 @@ class Prefijos(commands.Cog):
                 await ctx.send(f"No se encontró el rol con ID {role_id}. Asegúrate de que es correcto.")
                 return
 
+            # Enviar el mensaje de mención del rol
+            await target_channel.send(content=f"{role.mention}")
+
             # Crear un embed para el recordatorio
             reminder_embed = discord.Embed(
                 title="Recordatorio",
-                description=f"{role.mention}, u can get raws today?",
+                description="# u can get raws today?",
                 color=0xFFD700  # Dorado
             )
             await target_channel.send(embed=reminder_embed)
