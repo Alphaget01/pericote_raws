@@ -33,19 +33,6 @@ class PagoRaws(commands.Cog):
                 await interaction.response.send_message(f"No se encontraron registros para el mes: {mes}")
                 return
 
-            # Calcular el total de pagos para todos los registros
-            total_pago = 0
-            for registro in registros:
-                nombre = registro.get('nombre', 'Nombre no definido')
-                consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
-                precio = "No definido"
-
-                for serie_doc in consulta_precio:
-                    precio = serie_doc.to_dict().get('precio', 'No definido')
-                    if precio != "No definido" and precio != "0 usd":
-                        total_pago += 1.5
-                    break
-
             # Número máximo de registros por página
             max_por_pagina = 20
             total_paginas = (len(registros) + max_por_pagina - 1) // max_por_pagina  # Redondear hacia arriba
@@ -59,18 +46,24 @@ class PagoRaws(commands.Cog):
 
                 embed = discord.Embed(
                     title=f"Registro del precio de las raws del {mes}",
-                    description=f"Hay un total de {len(registros)} registros en {mes}. Página {pagina + 1}/{total_paginas}",
+                    description=f"Hay un total de {len(registros)} raws registradas en {mes}. Página {pagina + 1}/{total_paginas}",
                     color=0x00FF00
                 )
 
+                total_pago = 0  # Variable para calcular el pago total
+
                 for idx, registro in enumerate(registros_pagina, start=1 + pagina * max_por_pagina):
+                    # Buscar el precio correspondiente desde "nuevasseries"
                     nombre = registro.get('nombre', 'Nombre no definido')
                     consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
                     precio = "No definido"
 
                     for serie_doc in consulta_precio:
                         precio = serie_doc.to_dict().get('precio', 'No definido')
-                        break
+                        # Convertir precio a número si es posible
+                        if precio != "No definido" and precio != "0 usd":
+                            total_pago += 1.5
+                        break  # Solo necesitamos el primer resultado
 
                     # Añadir los datos al embed
                     embed.add_field(
@@ -86,24 +79,23 @@ class PagoRaws(commands.Cog):
                     value=f"El total por raws en {mes} es: {total_pago:.2f} usd",
                     inline=False
                 )
-
                 return embed
 
-            # Clase para manejar los botones de navegación
+            # Función para crear los botones de navegación
             class PaginacionView(View):
                 def __init__(self, total_paginas, pagina_actual):
                     super().__init__(timeout=60)
                     self.total_paginas = total_paginas
                     self.pagina_actual = pagina_actual
 
-                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
+                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=False)
                 async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual > 0:
                         self.pagina_actual -= 1
                         embed = crear_embed(self.pagina_actual)
                         await interaction.response.edit_message(embed=embed, view=self)
 
-                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
+                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=False)
                 async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual < self.total_paginas - 1:
                         self.pagina_actual += 1
