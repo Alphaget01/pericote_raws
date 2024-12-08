@@ -25,20 +25,20 @@ class PagoRaws(commands.Cog):
     @app_commands.checks.has_any_role(841509684174520340, 818273252531109919)
     async def pagoraws(self, interaction: discord.Interaction, mes: str):
         try:
-            # Consultar Firestore para obtener registros del mes seleccionado
-            query = db.collection('registroderaws').where('mes', '==', mes).stream()
+            # Consultar Firestore para obtener registros del mes seleccionado (limitado a 20)
+            query = db.collection('registroderaws').where('mes', '==', mes).limit(20).stream()
             registros = [doc.to_dict() for doc in query]
 
             if not registros:
                 await interaction.response.send_message(f"No se encontraron registros para el mes: {mes}")
                 return
 
-            registros_por_pagina = 20  # Limitar a 20 registros por página
-            total_paginas = (len(registros) // registros_por_pagina) + (1 if len(registros) % registros_por_pagina else 0)
-
+            registros_totales = db.collection('registroderaws').where('mes', '==', mes).stream()
+            registros_totales = [doc.to_dict() for doc in registros_totales]
+            
             # Calcular el total de pago para todos los registros
             total_pago = 0
-            for registro in registros:
+            for registro in registros_totales:
                 nombre = registro.get('nombre', 'Nombre no definido')
                 consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
                 precio = "No definido"
@@ -54,16 +54,16 @@ class PagoRaws(commands.Cog):
             def crear_embed(pagina_actual):
                 embed = discord.Embed(
                     title=f"Registro del precio de las raws del {mes}",
-                    description=f"Total de registros: {len(registros)}",
+                    description=f"Total de registros: {len(registros_totales)}",
                     color=0x00FF00
                 )
 
                 # Determinar el rango de registros para la página actual
-                inicio = (pagina_actual - 1) * registros_por_pagina
-                fin = min(inicio + registros_por_pagina, len(registros))
+                inicio = (pagina_actual - 1) * 20
+                fin = min(inicio + 20, len(registros_totales))
 
                 # Añadir los registros de la página al embed
-                for idx, registro in enumerate(registros[inicio:fin], start=inicio + 1):
+                for idx, registro in enumerate(registros_totales[inicio:fin], start=inicio + 1):
                     # Buscar el precio correspondiente desde "nuevasseries"
                     nombre = registro.get('nombre', 'Nombre no definido')
                     consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
@@ -92,6 +92,9 @@ class PagoRaws(commands.Cog):
                 )
 
                 return embed
+
+            # Calcular el total de páginas
+            total_paginas = (len(registros_totales) // 20) + (1 if len(registros_totales) % 20 else 0)
 
             # Clase para los botones de paginación
             class PaginacionView(View):
