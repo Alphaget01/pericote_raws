@@ -76,14 +76,14 @@ class VerRegistro(commands.Cog):
                     self.paginas_totales = paginas_totales
                     self.pagina_actual = pagina_actual
 
-                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == 0)
+                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=pagina_actual == 0)
                 async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual > 0:
                         self.pagina_actual -= 1
                         embed = crear_embed(self.pagina_actual)
                         await interaction.response.edit_message(embed=embed, view=self)
 
-                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == self.paginas_totales - 1)
+                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=pagina_actual == self.paginas_totales - 1)
                 async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual < self.paginas_totales - 1:
                         self.pagina_actual += 1
