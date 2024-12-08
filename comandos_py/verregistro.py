@@ -36,7 +36,7 @@ class VerRegistro(commands.Cog):
             # Número máximo de registros por página
             max_por_pagina = 20
             total_paginas = (len(registros) + max_por_pagina - 1) // max_por_pagina  # Redondear hacia arriba
-            pagina_actual = 0
+            pagina_actual = 0  # Comienza en la página 1
 
             # Función que crea el embed con los registros de la página actual
             def crear_embed(pagina):
@@ -71,21 +71,21 @@ class VerRegistro(commands.Cog):
 
             # Función para crear los botones de navegación
             class PaginacionView(View):
-                def __init__(self, paginas_totales, pagina_actual):
+                def __init__(self, total_paginas, pagina_actual):
                     super().__init__(timeout=60)
-                    self.paginas_totales = paginas_totales
+                    self.total_paginas = total_paginas
                     self.pagina_actual = pagina_actual
 
-                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=pagina_actual == 0)
+                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == 0)
                 async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual > 0:
                         self.pagina_actual -= 1
                         embed = crear_embed(self.pagina_actual)
                         await interaction.response.edit_message(embed=embed, view=self)
 
-                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=pagina_actual == self.paginas_totales - 1)
+                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == self.total_paginas - 1)
                 async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
-                    if self.pagina_actual < self.paginas_totales - 1:
+                    if self.pagina_actual < self.total_paginas - 1:
                         self.pagina_actual += 1
                         embed = crear_embed(self.pagina_actual)
                         await interaction.response.edit_message(embed=embed, view=self)
