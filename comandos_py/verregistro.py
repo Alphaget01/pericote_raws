@@ -34,7 +34,7 @@ class VerRegistro(commands.Cog):
                 return
 
             # Número máximo de registros por página
-            max_por_pagina = 20
+            max_por_pagina = 5
             total_paginas = (len(registros) + max_por_pagina - 1) // max_por_pagina  # Redondear hacia arriba
             pagina_actual = 0  # Comienza en la página 1
 
