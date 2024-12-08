@@ -32,7 +32,7 @@ class PagoRaws(commands.Cog):
                 return
 
             # Número máximo de registros por página
-            max_por_pagina = 20
+            max_por_pagina = 5
             total_paginas = (len(registros) + max_por_pagina - 1) // max_por_pagina  # Redondear hacia arriba
             pagina_actual = 0  # Comienza en la página 1
 
@@ -66,9 +66,7 @@ class PagoRaws(commands.Cog):
 
                     for serie_doc in consulta_precio:
                         precio = serie_doc.to_dict().get('precio', 'No definido')
-                        if precio != "No definido" and precio != "0 usd":
-                            total_pago += 1.5  # Añadir al total si tiene un precio
-                        break  # Solo necesitamos el primer resultado
+                        break
 
                     embed.add_field(
                         name=f"{idx}. {nombre}",
@@ -79,37 +77,42 @@ class PagoRaws(commands.Cog):
 
                 return embed
 
-            # Función para crear los botones de navegación
+            # Clase para manejar los botones de navegación
             class PaginacionView(View):
                 def __init__(self, total_paginas, pagina_actual):
                     super().__init__(timeout=60)
                     self.total_paginas = total_paginas
                     self.pagina_actual = pagina_actual
+                    self.message = None  # Asociar el mensaje a la vista
 
                 @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
                 async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual > 0:
                         self.pagina_actual -= 1
                         embed = crear_embed(self.pagina_actual)
-                        await interaction.response.edit_message(embed=embed, view=self)
+                        await self.message.edit(embed=embed, view=self)
+                        await interaction.response.defer()  # Confirmar interacción sin enviar respuesta
 
                 @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
                 async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual < self.total_paginas - 1:
                         self.pagina_actual += 1
                         embed = crear_embed(self.pagina_actual)
-                        await interaction.response.edit_message(embed=embed, view=self)
+                        await self.message.edit(embed=embed, view=self)
+                        await interaction.response.defer()  # Confirmar interacción sin enviar respuesta
 
                 async def on_timeout(self):
                     # Deshabilitar los botones después de 60 segundos
                     for button in self.children:
                         button.disabled = True
-                    await self.message.edit(view=self)
+                    if self.message:
+                        await self.message.edit(view=self)
 
-            # Crear vista de paginación y mostrar el primer embed
+            # Crear vista de paginación
             view = PaginacionView(total_paginas, pagina_actual)
             embed = crear_embed(pagina_actual)
-            await interaction.response.send_message(embed=embed, view=view)
+            message = await interaction.response.send_message(embed=embed, view=view)
+            view.message = await message.fetch()  # Asociar el mensaje a la vista
 
         except Exception as e:
             embed = discord.Embed(
