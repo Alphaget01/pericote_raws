@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import Button, View
 from utils.firestore_initiator import db  # Asegúrate de que Firestore esté configurado correctamente
 
 class PagoRaws(commands.Cog):
@@ -32,44 +33,86 @@ class PagoRaws(commands.Cog):
                 await interaction.response.send_message(f"No se encontraron registros para el mes: {mes}")
                 return
 
-            total_pago = 0  # Variable para calcular el pago total
-            embed = discord.Embed(
-                title=f"Registro del precio de las raws del {mes}",
-                description=f"Hay un total de registros: {len(registros)}",
-                color=0x00FF00
-            )
+            # Número máximo de registros por página
+            max_por_pagina = 20
+            total_paginas = (len(registros) + max_por_pagina - 1) // max_por_pagina  # Redondear hacia arriba
+            pagina_actual = 0  # Comienza en la página 1
 
-            for idx, registro in enumerate(registros, start=1):
-                # Buscar el precio correspondiente desde "nuevasseries"
-                nombre = registro.get('nombre', 'Nombre no definido')
-                consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
-                precio = "No definido"
+            # Función que crea el embed con los registros de la página actual
+            def crear_embed(pagina):
+                start = pagina * max_por_pagina
+                end = min(start + max_por_pagina, len(registros))
+                registros_pagina = registros[start:end]
 
-                for serie_doc in consulta_precio:
-                    precio = serie_doc.to_dict().get('precio', 'No definido')
-                    # Convertir precio a número si es posible
-                    if precio != "No definido" and precio != "0 usd":
-                        total_pago += 1.5
-                    break  # Solo necesitamos el primer resultado
+                total_pago = 0  # Variable para calcular el pago total de la página actual
+                embed = discord.Embed(
+                    title=f"Registro del precio de las raws del {mes}",
+                    description=f"Hay un total de {len(registros)} registros. Página {pagina + 1}/{total_paginas}",
+                    color=0x00FF00
+                )
 
-                # Añadir los datos al embed
+                for idx, registro in enumerate(registros_pagina, start=1 + pagina * max_por_pagina):
+                    # Buscar el precio correspondiente desde "nuevasseries"
+                    nombre = registro.get('nombre', 'Nombre no definido')
+                    consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
+                    precio = "No definido"
+
+                    for serie_doc in consulta_precio:
+                        precio = serie_doc.to_dict().get('precio', 'No definido')
+                        # Convertir precio a número si es posible
+                        if precio != "No definido" and precio != "0 usd":
+                            total_pago += 1.5  # El pago por raw es 1.5 si tiene precio válido
+                        break  # Solo necesitamos el primer resultado
+
+                    # Añadir los datos al embed
+                    embed.add_field(
+                        name=f"{idx}. {nombre}",
+                        value=(f"**Chapter:** {registro.get('chapter', 'No definido')}\n"
+                               f"**Precio:** {precio}"),
+                        inline=False
+                    )
+
+                # Añadir el total de la página al embed
                 embed.add_field(
-                    name=f"{idx}. {nombre}",
-                    value=(
-                        f"**Chapter:** {registro.get('chapter', 'No definido')}\n"
-                        f"**Precio:** {precio}"
-                    ),
+                    name="Total de la Página",
+                    value=f"El total por raws en esta página es: {total_pago:.2f} usd",
                     inline=False
                 )
 
-            # Añadir el total al embed
-            embed.add_field(
-                name="Total",
-                value=f"El total por raws en {mes} es: {total_pago:.2f} usd",
-                inline=False
-            )
+                return embed
 
-            await interaction.response.send_message(embed=embed)
+            # Función para crear los botones de navegación
+            class PaginacionView(View):
+                def __init__(self, total_paginas, pagina_actual):
+                    super().__init__(timeout=60)
+                    self.total_paginas = total_paginas
+                    self.pagina_actual = pagina_actual
+
+                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=False)
+                async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
+                    if self.pagina_actual > 0:
+                        self.pagina_actual -= 1
+                        embed = crear_embed(self.pagina_actual)
+                        await interaction.response.edit_message(embed=embed, view=self)
+
+                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=False)
+                async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
+                    if self.pagina_actual < self.total_paginas - 1:
+                        self.pagina_actual += 1
+                        embed = crear_embed(self.pagina_actual)
+                        await interaction.response.edit_message(embed=embed, view=self)
+
+                async def on_timeout(self):
+                    # Deshabilitar los botones después de 60 segundos
+                    for button in self.children:
+                        button.disabled = True
+                    await self.message.edit(view=self)
+
+            # Crear vista de paginación y mostrar el primer embed
+            view = PaginacionView(total_paginas, pagina_actual)
+            embed = crear_embed(pagina_actual)
+            await interaction.response.send_message(embed=embed, view=view)
+
         except Exception as e:
             embed = discord.Embed(
                 title="Error",
