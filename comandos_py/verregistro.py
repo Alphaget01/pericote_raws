@@ -76,19 +76,25 @@ class VerRegistro(commands.Cog):
                     self.total_paginas = total_paginas
                     self.pagina_actual = pagina_actual
 
-                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == 0)
+                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=False)
                 async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual > 0:
                         self.pagina_actual -= 1
                         embed = crear_embed(self.pagina_actual)
                         await interaction.response.edit_message(embed=embed, view=self)
 
-                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == self.total_paginas - 1)
+                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=False)
                 async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual < self.total_paginas - 1:
                         self.pagina_actual += 1
                         embed = crear_embed(self.pagina_actual)
                         await interaction.response.edit_message(embed=embed, view=self)
+
+                async def on_timeout(self):
+                    # Deshabilitar los botones después de 60 segundos
+                    for button in self.children:
+                        button.disabled = True
+                    await self.message.edit(view=self)
 
             # Crear vista de paginación y mostrar el primer embed
             view = PaginacionView(total_paginas, pagina_actual)
