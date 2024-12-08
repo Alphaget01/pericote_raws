@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import Button, View
 from utils.firestore_initiator import db  # Asegúrate de que Firestore esté configurado correctamente
 
 class VerRegistro(commands.Cog):
@@ -32,34 +33,68 @@ class VerRegistro(commands.Cog):
                 await interaction.response.send_message(f"No se encontraron registros para el mes: {mes}")
                 return
 
-            # Crear embed con los registros encontrados
-            embed = discord.Embed(
-                title=f"Registro de las raws del {mes}",
-                description=f"Hay un total de raws registradas en {mes}: {len(registros)}",
-                color=0x00FF00
-            )
+            # Número máximo de registros por página
+            max_por_pagina = 20
+            total_paginas = (len(registros) + max_por_pagina - 1) // max_por_pagina  # Redondear hacia arriba
+            pagina_actual = 0
 
-            for idx, registro in enumerate(registros, start=1):
-                # Buscar el precio correspondiente desde "nuevasseries"
-                nombre = registro.get('nombre', 'Nombre no definido')
-                consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
-                precio = "No definido"
+            # Función que crea el embed con los registros de la página actual
+            def crear_embed(pagina):
+                start = pagina * max_por_pagina
+                end = min(start + max_por_pagina, len(registros))
+                registros_pagina = registros[start:end]
 
-                for serie_doc in consulta_precio:
-                    precio = serie_doc.to_dict().get('precio', 'No definido')
-                    break  # Solo necesitamos el primer resultado
-
-                # Añadir los datos al embed
-                embed.add_field(
-                    name=f"{idx}. {nombre}",
-                    value=(
-                        f"**Chapter:** {registro.get('chapter', 'No definido')}\n"
-                        f"**Precio:** {precio}"
-                    ),
-                    inline=False
+                embed = discord.Embed(
+                    title=f"Registro de las raws del {mes}",
+                    description=f"Hay un total de {len(registros)} raws registradas en {mes}. Página {pagina + 1}/{total_paginas}",
+                    color=0x00FF00
                 )
 
-            await interaction.response.send_message(embed=embed)
+                for idx, registro in enumerate(registros_pagina, start=1 + pagina * max_por_pagina):
+                    # Buscar el precio correspondiente desde "nuevasseries"
+                    nombre = registro.get('nombre', 'Nombre no definido')
+                    consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
+                    precio = "No definido"
+
+                    for serie_doc in consulta_precio:
+                        precio = serie_doc.to_dict().get('precio', 'No definido')
+                        break  # Solo necesitamos el primer resultado
+
+                    # Añadir los datos al embed
+                    embed.add_field(
+                        name=f"{idx}. {nombre}",
+                        value=(f"**Chapter:** {registro.get('chapter', 'No definido')}\n"
+                               f"**Precio:** {precio}"),
+                        inline=False
+                    )
+                return embed
+
+            # Función para crear los botones de navegación
+            class PaginacionView(View):
+                def __init__(self, paginas_totales, pagina_actual):
+                    super().__init__(timeout=60)
+                    self.paginas_totales = paginas_totales
+                    self.pagina_actual = pagina_actual
+
+                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == 0)
+                async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
+                    if self.pagina_actual > 0:
+                        self.pagina_actual -= 1
+                        embed = crear_embed(self.pagina_actual)
+                        await interaction.response.edit_message(embed=embed, view=self)
+
+                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=self.pagina_actual == self.paginas_totales - 1)
+                async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
+                    if self.pagina_actual < self.paginas_totales - 1:
+                        self.pagina_actual += 1
+                        embed = crear_embed(self.pagina_actual)
+                        await interaction.response.edit_message(embed=embed, view=self)
+
+            # Crear vista de paginación y mostrar el primer embed
+            view = PaginacionView(total_paginas, pagina_actual)
+            embed = crear_embed(pagina_actual)
+            await interaction.response.send_message(embed=embed, view=view)
+
         except Exception as e:
             embed = discord.Embed(
                 title="Error",
