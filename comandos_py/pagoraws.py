@@ -116,7 +116,7 @@ class PagoRaws(commands.Cog):
             message = await interaction.response.send_message(embed=embed, view=view)
 
             # Asociar el mensaje al objeto 'view'
-            view.message = await message.fetch()  # Esto garantiza que la vista esté asociada al mensaje
+            view.message = message  # Esto garantiza que la vista esté asociada al mensaje
 
         except Exception as e:
             embed = discord.Embed(
