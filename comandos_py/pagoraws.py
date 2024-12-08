@@ -10,11 +10,9 @@ class PagoRaws(commands.Cog):
 
     # Función de autocompletado para "mes"
     async def autocompletar_meses(self, interaction: discord.Interaction, current: str):
-        # Opciones de meses predefinidos
         opciones_meses = [
             "octubre2024", "noviembre2024", "diciembre2024", "enero2025"
         ]
-        # Si no hay texto en el campo, devuelve todas las opciones
         meses_filtrados = opciones_meses if not current else [mes for mes in opciones_meses if current.lower() in mes.lower()]
         return [
             app_commands.Choice(name=mes, value=mes) for mes in meses_filtrados
@@ -25,18 +23,15 @@ class PagoRaws(commands.Cog):
     @app_commands.checks.has_any_role(841509684174520340, 818273252531109919)
     async def pagoraws(self, interaction: discord.Interaction, mes: str):
         try:
-            # Consultar Firestore para obtener registros del mes seleccionado (limitado a 20)
+            # Consultar Firestore para obtener los registros del mes seleccionado (limitado a 20)
             query = db.collection('registroderaws').where('mes', '==', mes).limit(20).stream()
             registros = [doc.to_dict() for doc in query]
 
-            if not registros:
-                await interaction.response.send_message(f"No se encontraron registros para el mes: {mes}")
-                return
+            # Consultar todos los registros para el cálculo total
+            query_total = db.collection('registroderaws').where('mes', '==', mes).stream()
+            registros_totales = [doc.to_dict() for doc in query_total]
 
-            registros_totales = db.collection('registroderaws').where('mes', '==', mes).stream()
-            registros_totales = [doc.to_dict() for doc in registros_totales]
-            
-            # Calcular el total de pago para todos los registros
+            # Calcular el total de pagos
             total_pago = 0
             for registro in registros_totales:
                 nombre = registro.get('nombre', 'Nombre no definido')
@@ -45,16 +40,15 @@ class PagoRaws(commands.Cog):
 
                 for serie_doc in consulta_precio:
                     precio = serie_doc.to_dict().get('precio', 'No definido')
-                    # Convertir precio a número si es posible
                     if precio != "No definido" and precio != "0 usd":
                         total_pago += 1.5
-                    break  # Solo necesitamos el primer resultado
+                    break
 
-            # Función para crear el embed con los registros de una página
+            # Crear el embed con los registros de la primera página
             def crear_embed(pagina_actual):
                 embed = discord.Embed(
                     title=f"Registro del precio de las raws del {mes}",
-                    description=f"Total de registros: {len(registros_totales)}",
+                    description=f"Hay un total de {len(registros_totales)} registros.",
                     color=0x00FF00
                 )
 
@@ -64,19 +58,15 @@ class PagoRaws(commands.Cog):
 
                 # Añadir los registros de la página al embed
                 for idx, registro in enumerate(registros_totales[inicio:fin], start=inicio + 1):
-                    # Buscar el precio correspondiente desde "nuevasseries"
                     nombre = registro.get('nombre', 'Nombre no definido')
                     consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
                     precio = "No definido"
 
                     for serie_doc in consulta_precio:
                         precio = serie_doc.to_dict().get('precio', 'No definido')
-                        # Convertir precio a número si es posible
                         if precio != "No definido" and precio != "0 usd":
-                            # total_pago ya está calculado previamente
-                            break  # Solo necesitamos el primer resultado
+                            break
 
-                    # Añadir los datos al embed
                     embed.add_field(
                         name=f"{idx}. {nombre}",
                         value=(f"**Chapter:** {registro.get('chapter', 'No definido')}\n"
@@ -84,7 +74,7 @@ class PagoRaws(commands.Cog):
                         inline=False
                     )
 
-                # Añadir el total al embed (mostrado solo al final)
+                # Añadir el total por todas las raws al final
                 embed.add_field(
                     name="Total",
                     value=f"El total por raws en {mes} es: {total_pago:.2f} usd",
