@@ -111,8 +111,12 @@ class PagoRaws(commands.Cog):
             # Crear vista de paginación
             view = PaginacionView(total_paginas, pagina_actual)
             embed = crear_embed(pagina_actual)
+
+            # Crear el mensaje con la vista de paginación
             message = await interaction.response.send_message(embed=embed, view=view)
-            view.message = await message.fetch()  # Asociar el mensaje a la vista
+
+            # Asociar el mensaje al objeto 'view'
+            view.message = await message.fetch()  # Esto garantiza que la vista esté asociada al mensaje
 
         except Exception as e:
             embed = discord.Embed(
