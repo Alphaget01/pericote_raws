@@ -10,9 +10,11 @@ class PagoRaws(commands.Cog):
 
     # Función de autocompletado para "mes"
     async def autocompletar_meses(self, interaction: discord.Interaction, current: str):
+        # Opciones de meses predefinidos
         opciones_meses = [
             "octubre2024", "noviembre2024", "diciembre2024", "enero2025"
         ]
+        # Si no hay texto en el campo, devuelve todas las opciones
         meses_filtrados = opciones_meses if not current else [mes for mes in opciones_meses if current.lower() in mes.lower()]
         return [
             app_commands.Choice(name=mes, value=mes) for mes in meses_filtrados
@@ -23,17 +25,17 @@ class PagoRaws(commands.Cog):
     @app_commands.checks.has_any_role(841509684174520340, 818273252531109919)
     async def pagoraws(self, interaction: discord.Interaction, mes: str):
         try:
-            # Consultar Firestore para obtener los registros del mes seleccionado (limitado a 20)
-            query = db.collection('registroderaws').where('mes', '==', mes).limit(20).stream()
+            # Consultar Firestore para obtener registros del mes seleccionado
+            query = db.collection('registroderaws').where('mes', '==', mes).stream()
             registros = [doc.to_dict() for doc in query]
 
-            # Consultar todos los registros para el cálculo total
-            query_total = db.collection('registroderaws').where('mes', '==', mes).stream()
-            registros_totales = [doc.to_dict() for doc in query_total]
+            if not registros:
+                await interaction.response.send_message(f"No se encontraron registros para el mes: {mes}")
+                return
 
-            # Calcular el total de pagos
+            # Calcular el total de pagos para todos los registros
             total_pago = 0
-            for registro in registros_totales:
+            for registro in registros:
                 nombre = registro.get('nombre', 'Nombre no definido')
                 consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
                 precio = "No definido"
@@ -44,29 +46,33 @@ class PagoRaws(commands.Cog):
                         total_pago += 1.5
                     break
 
-            # Crear el embed con los registros de la primera página
-            def crear_embed(pagina_actual):
+            # Número máximo de registros por página
+            max_por_pagina = 20
+            total_paginas = (len(registros) + max_por_pagina - 1) // max_por_pagina  # Redondear hacia arriba
+            pagina_actual = 0  # Comienza en la página 1
+
+            # Función que crea el embed con los registros de la página actual
+            def crear_embed(pagina):
+                start = pagina * max_por_pagina
+                end = min(start + max_por_pagina, len(registros))
+                registros_pagina = registros[start:end]
+
                 embed = discord.Embed(
                     title=f"Registro del precio de las raws del {mes}",
-                    description=f"Hay un total de {len(registros_totales)} registros.",
+                    description=f"Hay un total de {len(registros)} registros en {mes}. Página {pagina + 1}/{total_paginas}",
                     color=0x00FF00
                 )
 
-                # Determinar el rango de registros para la página actual
-                inicio = (pagina_actual - 1) * 20
-                fin = min(inicio + 20, len(registros_totales))
-
-                # Añadir los registros de la página al embed
-                for idx, registro in enumerate(registros_totales[inicio:fin], start=inicio + 1):
+                for idx, registro in enumerate(registros_pagina, start=1 + pagina * max_por_pagina):
                     nombre = registro.get('nombre', 'Nombre no definido')
                     consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
                     precio = "No definido"
 
                     for serie_doc in consulta_precio:
                         precio = serie_doc.to_dict().get('precio', 'No definido')
-                        if precio != "No definido" and precio != "0 usd":
-                            break
+                        break
 
+                    # Añadir los datos al embed
                     embed.add_field(
                         name=f"{idx}. {nombre}",
                         value=(f"**Chapter:** {registro.get('chapter', 'No definido')}\n"
@@ -74,7 +80,7 @@ class PagoRaws(commands.Cog):
                         inline=False
                     )
 
-                # Añadir el total por todas las raws al final
+                # Añadir el total al embed
                 embed.add_field(
                     name="Total",
                     value=f"El total por raws en {mes} es: {total_pago:.2f} usd",
@@ -83,31 +89,37 @@ class PagoRaws(commands.Cog):
 
                 return embed
 
-            # Calcular el total de páginas
-            total_paginas = (len(registros_totales) // 20) + (1 if len(registros_totales) % 20 else 0)
-
-            # Clase para los botones de paginación
+            # Clase para manejar los botones de navegación
             class PaginacionView(View):
-                def __init__(self, pagina_actual):
+                def __init__(self, total_paginas, pagina_actual):
                     super().__init__(timeout=60)
-                    self.pagina_actual = pagina_actual
                     self.total_paginas = total_paginas
+                    self.pagina_actual = pagina_actual
 
                 @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
                 async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
-                    if self.pagina_actual > 1:
+                    if self.pagina_actual > 0:
                         self.pagina_actual -= 1
-                        await interaction.response.edit_message(embed=crear_embed(self.pagina_actual), view=self)
+                        embed = crear_embed(self.pagina_actual)
+                        await interaction.response.edit_message(embed=embed, view=self)
 
                 @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
                 async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
-                    if self.pagina_actual < self.total_paginas:
+                    if self.pagina_actual < self.total_paginas - 1:
                         self.pagina_actual += 1
-                        await interaction.response.edit_message(embed=crear_embed(self.pagina_actual), view=self)
+                        embed = crear_embed(self.pagina_actual)
+                        await interaction.response.edit_message(embed=embed, view=self)
 
-            # Crear vista de los botones y el embed para la primera página
-            view = PaginacionView(pagina_actual=1)
-            await interaction.response.send_message(embed=crear_embed(1), view=view)
+                async def on_timeout(self):
+                    # Deshabilitar los botones después de 60 segundos
+                    for button in self.children:
+                        button.disabled = True
+                    await self.message.edit(view=self)
+
+            # Crear vista de paginación y mostrar el primer embed
+            view = PaginacionView(total_paginas, pagina_actual)
+            embed = crear_embed(pagina_actual)
+            await interaction.response.send_message(embed=embed, view=view)
 
         except Exception as e:
             embed = discord.Embed(
