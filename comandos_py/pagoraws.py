@@ -10,11 +10,9 @@ class PagoRaws(commands.Cog):
 
     # Función de autocompletado para "mes"
     async def autocompletar_meses(self, interaction: discord.Interaction, current: str):
-        # Opciones de meses predefinidos
         opciones_meses = [
             "octubre2024", "noviembre2024", "diciembre2024", "enero2025"
         ]
-        # Si no hay texto en el campo, devuelve todas las opciones
         meses_filtrados = opciones_meses if not current else [mes for mes in opciones_meses if current.lower() in mes.lower()]
         return [
             app_commands.Choice(name=mes, value=mes) for mes in meses_filtrados
@@ -46,26 +44,32 @@ class PagoRaws(commands.Cog):
 
                 embed = discord.Embed(
                     title=f"Registro del precio de las raws del {mes}",
-                    description=f"Hay un total de {len(registros)} raws registradas en {mes}. Página {pagina + 1}/{total_paginas}",
+                    description=f"Página {pagina + 1}/{total_paginas}",
                     color=0x00FF00
                 )
 
-                total_pago = 0  # Variable para calcular el pago total
+                # Calcular el total de raws multiplicado por 1.5
+                total_pago = len(registros) * 1.5
 
+                # Total en la parte superior en negrita
+                embed.add_field(
+                    name="Total",
+                    value=f"El total por {len(registros)} raws en {mes} es: **{total_pago:.2f} USD**",
+                    inline=False
+                )
+
+                # Añadir los registros de la página actual
                 for idx, registro in enumerate(registros_pagina, start=1 + pagina * max_por_pagina):
-                    # Buscar el precio correspondiente desde "nuevasseries"
                     nombre = registro.get('nombre', 'Nombre no definido')
                     consulta_precio = db.collection('nuevasseries').where('nombre', '==', nombre).stream()
                     precio = "No definido"
 
                     for serie_doc in consulta_precio:
                         precio = serie_doc.to_dict().get('precio', 'No definido')
-                        # Convertir precio a número si es posible
                         if precio != "No definido" and precio != "0 usd":
-                            total_pago += 1.5
+                            total_pago += 1.5  # Añadir al total si tiene un precio
                         break  # Solo necesitamos el primer resultado
 
-                    # Añadir los datos al embed
                     embed.add_field(
                         name=f"{idx}. {nombre}",
                         value=(f"**Chapter:** {registro.get('chapter', 'No definido')}\n"
@@ -73,12 +77,6 @@ class PagoRaws(commands.Cog):
                         inline=False
                     )
 
-                # Añadir el total al embed
-                embed.add_field(
-                    name="Total",
-                    value=f"El total por raws en {mes} es: {total_pago:.2f} usd",
-                    inline=False
-                )
                 return embed
 
             # Función para crear los botones de navegación
@@ -88,14 +86,14 @@ class PagoRaws(commands.Cog):
                     self.total_paginas = total_paginas
                     self.pagina_actual = pagina_actual
 
-                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, disabled=False)
+                @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
                 async def pagina_anterior(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual > 0:
                         self.pagina_actual -= 1
                         embed = crear_embed(self.pagina_actual)
                         await interaction.response.edit_message(embed=embed, view=self)
 
-                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, disabled=False)
+                @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
                 async def pagina_siguiente(self, button: Button, interaction: discord.Interaction):
                     if self.pagina_actual < self.total_paginas - 1:
                         self.pagina_actual += 1
